@@ -43,6 +43,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.codec.binary.StringUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.ClientProtocolException;
@@ -97,6 +98,10 @@ public class Dictionary {
 	private final static  String EXT_STOP = "ext_stopwords";
 	private final static  String REMOTE_EXT_STOP = "remote_ext_stopwords";
 
+	private final static String REMOTE_UPDATE_PERIOD = "remote_update_interval";
+
+	private static long remoteUpdatePeriodValue;
+
 	private Path conf_dir;
 	private Properties props;
 
@@ -128,6 +133,36 @@ public class Dictionary {
 				logger.error("ik-analyzer", e);
 			}
 		}
+		// 初始化远程更新周期
+		initializeRemoteUpdatePeriod();
+	}
+
+	/**
+	 * 获取远程更新周期
+	 */
+	private long getRemoteUpdatePeriod() {
+		String remoteUpdateIntervalStr = getProperty(REMOTE_UPDATE_PERIOD);
+		long updatePeriodValue;
+		if (remoteUpdateIntervalStr != null) {
+			try {
+				updatePeriodValue = Long.parseLong(remoteUpdateIntervalStr);
+			} catch (NumberFormatException e) {
+				logger.error("Unable to parse remote update period. Using default value.", e);
+				// 默认值60秒
+				updatePeriodValue = 60L;
+			}
+		} else {
+			// 如果配置文件中没有指定，则使用默认值
+			updatePeriodValue = 60L;
+		}
+		return updatePeriodValue;
+	}
+
+	/**
+	 * 初始化远程更新周期
+	 */
+	private void initializeRemoteUpdatePeriod() {
+		remoteUpdatePeriodValue = getRemoteUpdatePeriod();
 	}
 
 	private String getProperty(String key){
@@ -159,10 +194,10 @@ public class Dictionary {
 						// 建立监控线程
 						for (String location : singleton.getRemoteExtDictionarys()) {
 							// 10 秒是初始延迟可以修改的 60是间隔时间 单位秒
-							pool.scheduleAtFixedRate(new Monitor(location), 10, 60, TimeUnit.SECONDS);
+							pool.scheduleAtFixedRate(new Monitor(location), 10, remoteUpdatePeriodValue, TimeUnit.SECONDS);
 						}
 						for (String location : singleton.getRemoteExtStopWordDictionarys()) {
-							pool.scheduleAtFixedRate(new Monitor(location), 10, 60, TimeUnit.SECONDS);
+							pool.scheduleAtFixedRate(new Monitor(location), 10, remoteUpdatePeriodValue, TimeUnit.SECONDS);
 						}
 					}
 
